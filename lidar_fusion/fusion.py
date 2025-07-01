@@ -10,7 +10,7 @@ from sensor_msgs.msg import LaserScan
 
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 
-from lidar_fusion.utils import read_camera_config
+from lidar_fusion.utils import read_camera_config, LidarToImageProjector
 from ros2_numpy import from_detection2d_array, scan_to_np
 import numpy as np
 
@@ -20,9 +20,12 @@ class SyncedFusionNode(Node):
         super().__init__('synced_fusion_node')
 
         # Load camera calibration
-        self.K, self.T = read_camera_config(config_path)
-        self.get_logger().info(f'Loaded Intrinsic Matrix (K):\n{self.K}')
-        self.get_logger().info(f'Loaded Extrinsic Matrix (T):\n{self.T}')
+        K, T = read_camera_config(config_path)
+        self.get_logger().info(f'Loaded Intrinsic Matrix (K):\n{K}')
+        self.get_logger().info(f'Loaded Extrinsic Matrix (T):\n{T}')
+
+        # LiDAR-to-camera projection tool used for camera-LiDAR fusion
+        self.projector = LidarToImageProjector(K, T)
 
         # Sensor QoS
         qos = qos_profile_sensor_data
@@ -42,10 +45,6 @@ class SyncedFusionNode(Node):
         self.get_logger().info('Subscribed to /detections_2d and /scan using message_filters')
 
     def fusion_callback(self, detection_msg: Detection2DArray, scan_msg: LaserScan):
-        # Timestamps
-        detection_sec = detection_msg.header.stamp.sec + 1e-9 * detection_msg.header.stamp.nanosec
-        scan_sec = scan_msg.header.stamp.sec + 1e-9 * scan_msg.header.stamp.nanosec
-        dt = detection_sec - scan_sec
 
         # Parse detections
         detections, timestamp_2d = from_detection2d_array(detection_msg)
@@ -57,6 +56,9 @@ class SyncedFusionNode(Node):
         # Create 3D points in vehicle coordinates (z = 0)
         self.pts = np.column_stack([x, y, np.zeros_like(x)])
 
+        # Project 3D points to 2D image coordinates
+        pixels, depth, x_values, y_values = self.projector.project_points_to_image(self.pts)
+        
         dt = timestamp_2d - timestamp_scan
         self.get_logger().info(f'Δt = {dt:.6f} s')
 
