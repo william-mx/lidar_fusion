@@ -1,0 +1,62 @@
+# lidar_to_camera_transform.yaml
+
+# This file defines the rigid-body transform from a LiDAR sensor to a camera.
+# It includes a detailed explanation of the process and the resulting [R | t] matrix,
+# as well as the camera intrinsic parameters for projection.
+
+explanation: |
+  Compute the rigid-body transform from LiDAR to Camera.
+
+  LiDAR frame:   x-forward, y-left,  z-down   (left-handed)
+  Camera frame:  x-right,   y-down,  z-forward (right-handed OpenCV/ROS optical)
+
+  Rotation:
+    1) Base alignment (R_base):
+       Re-orient LiDAR axes into camera axes:
+       R_base =
+         [  0, -1,  0 ]
+         [  0,  0, -1 ]
+         [  1,  0,  0 ]
+
+    2) Additional LiDAR yaw rotation (R_rot):
+       228° clockwise around LiDAR Z-axis (in radians: -2.513)
+       R_rot =
+         [  0.7431,  0.6691,  0.0 ]
+         [ -0.6691,  0.7431,  0.0 ]
+         [   0.0,     0.0,    1.0 ]
+
+    3) Combined rotation matrix:
+       R = R_base @ R_rot =
+         [  0.7431,  0.6691,  0.0 ]
+         [  0.0,     0.0,   -1.0 ]
+         [ -0.6691,  0.7431,  0.0 ]
+
+  Translation vector t is in **camera coordinates** (meters):
+    [ -0.0015, -0.06, -0.04 ]
+    • +X moves right in the image
+    • +Y moves down in the image
+    • +Z moves forward in optical axis
+
+  Final 3×4 rigid-body transform matrix T = [R | t]:
+
+transform_matrix:
+  rows: 3
+  cols: 4
+  data:
+    - [  0.7431,  0.6691,  0.0,   -0.0015 ]
+    - [  0.0,     0.0,    -1.0,   -0.06   ]
+    - [ -0.6691,  0.7431,  0.0,   -0.04   ]
+
+intrinsic_matrix:
+  description: |
+    Camera intrinsic matrix K used for 2D projection from 3D.
+    This matrix was retrieved from the ROS topic:
+      /camera/camera/color/camera_info
+    Valid for 640×360 images.
+
+  rows: 3
+  cols: 3
+  data:
+    - [ 455.21691895,     0.0,         324.14334106 ]
+    - [   0.0,         455.26907349,   188.91212463 ]
+    - [   0.0,           0.0,             1.0       ]
