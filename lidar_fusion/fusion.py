@@ -7,11 +7,12 @@ from ament_index_python.packages import get_package_prefix
 
 from vision_msgs.msg import Detection2DArray
 from sensor_msgs.msg import LaserScan
+from visualization_msgs.msg import ImageMarker
 
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 
 from lidar_fusion.utils import read_camera_config, LidarToImageProjector
-from ros2_numpy import from_detection2d_array, scan_to_np
+from ros2_numpy import from_detection2d_array, scan_to_np, pc_to_image_marker
 import numpy as np
 
 
@@ -34,6 +35,8 @@ class SyncedFusionNode(Node):
         # Subscribers using message_filters
         self.detection_sub = Subscriber(self, Detection2DArray, '/detections_2d', qos_profile=qos)
         self.scan_sub = Subscriber(self, LaserScan, '/scan', qos_profile=qos)
+
+        self.annotation_pub = self.create_publisher(ImageMarker, '/annotations', qos_profile=qos)
 
         self.ats = ApproximateTimeSynchronizer(
             [self.detection_sub, self.scan_sub],
@@ -58,9 +61,16 @@ class SyncedFusionNode(Node):
 
         # Project 3D points to 2D image coordinates
         pixels, depth, x_values, y_values = self.projector.project_points_to_image(self.pts)
-        
-        dt = timestamp_2d - timestamp_scan
-        self.get_logger().info(f'Δt = {dt:.6f} s')
+
+        # Convert 3D point cloud projection (in pixel space) into an ImageMarker message
+        marker = pc_to_image_marker(pixels, timestamp=timestamp_2d, depth=depth)
+
+        # Publish the marker to the /annotations topic for visualization in Foxglove
+        self.annotation_pub.publish(marker)
+
+        # Log the time difference between image and LiDAR frame timestamps
+        # dt = timestamp_2d - timestamp_scan
+        # self.get_logger().info(f'dt = {dt:.3f} s')
 
 def main(args=None):
     rclpy.init(args=args)
